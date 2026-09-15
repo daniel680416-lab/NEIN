@@ -10,6 +10,32 @@ import main  # noqa: E402
 
 
 class MainToolTests(unittest.TestCase):
+    def sample_info(self):
+        icons = {
+            'CFBundlePrimaryIcon': {
+                'CFBundleIconFiles': ['basic_default60x60'],
+                'CFBundleIconName': 'basic_default',
+            },
+            'CFBundleAlternateIcons': {
+                'design_deep_blue': {'CFBundleIconName': 'design_deep_blue'},
+                'design_simple_banana': {'CFBundleIconName': 'design_simple_banana'},
+            },
+        }
+        return {
+            'CFBundleIdentifier': 'jp.naver.line',
+            'CFBundleShortVersionString': '26.14.0',
+            'CFBundleDisplayName': 'LINE',
+            'CFBundleName': 'LINE',
+            'CFBundleURLTypes': [{
+                'CFBundleURLSchemes': ['line', 'lineauth2'],
+            }],
+            'CFBundleURLTypes~ipad': [{
+                'CFBundleURLSchemes': ['line'],
+            }],
+            'CFBundleIcons': icons,
+            'CFBundleIcons~ipad': icons,
+        }
+
     def test_entry_patch_requires_expected_instruction(self):
         profile = main.PATCH_PROFILES[0]
         binary = bytearray(profile.patch_offset + 4)
@@ -40,14 +66,51 @@ class MainToolTests(unittest.TestCase):
         ])
 
     def test_output_info_plist_uses_default_bundle_id(self):
-        source = {
-            'CFBundleIdentifier': 'jp.naver.line',
-            'CFBundleShortVersionString': '26.14.0',
-        }
-        output = plistlib.loads(main.patched_info_plist(source))
+        source = self.sample_info()
+        output = plistlib.loads(main.patched_info_plist(source, main.DEFAULT_ICON))
         self.assertEqual(output['CFBundleIdentifier'], 'kinta.ma.nein')
+        self.assertEqual(output['CFBundleDisplayName'], 'NEIN')
+        self.assertEqual(output['CFBundleName'], 'NEIN')
+        self.assertNotIn('CFBundleURLTypes', output)
+        self.assertNotIn('CFBundleURLTypes~ipad', output)
+        self.assertEqual(
+            output['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconName'],
+            'design_simple_banana',
+        )
+        self.assertEqual(
+            output['CFBundleIcons~ipad']['CFBundlePrimaryIcon']['CFBundleIconName'],
+            'design_simple_banana',
+        )
         self.assertEqual(source['CFBundleIdentifier'], 'jp.naver.line')
         self.assertEqual(output['CFBundleShortVersionString'], '26.14.0')
+        self.assertEqual(
+            source['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconName'],
+            'basic_default',
+        )
+
+    def test_output_info_plist_accepts_available_custom_icon(self):
+        output = plistlib.loads(main.patched_info_plist(
+            self.sample_info(), 'design_deep_blue',
+        ))
+        self.assertEqual(
+            output['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconName'],
+            'design_deep_blue',
+        )
+
+    def test_output_info_plist_rejects_unknown_icon(self):
+        with self.assertRaisesRegex(ValueError, 'Unknown app icon'):
+            main.patched_info_plist(self.sample_info(), 'unknown_icon')
+
+    def test_icon_argument_defaults_and_accepts_custom_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'input.ipa'
+            output = Path(directory) / 'output.ipa'
+            default_args = main.parse_args([str(source), str(output)])
+            custom_args = main.parse_args([
+                str(source), str(output), '--icon', 'design_deep_blue',
+            ])
+        self.assertEqual(default_args.icon, 'design_simple_banana')
+        self.assertEqual(custom_args.icon, 'design_deep_blue')
 
     def test_ad_removal_options_are_parsed(self):
         with tempfile.TemporaryDirectory() as directory:

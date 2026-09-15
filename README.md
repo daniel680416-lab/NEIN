@@ -10,9 +10,11 @@
 
 ### LINE 26.14.0
 
-NEIN 需要解密過的 LINE IPA，如果沒有越獄裝置可以自己進行 IPA 解密，則請自行在網路上搜尋現成的 IPA。
-NEIN 會將主 App 的 Bundle ID 設為 `kinta.ma.nein`，並移除內嵌擴充功能與 Watch app。完成後請使用自己的憑證和 provisioning profile 完整重簽名再安裝。修改版可正常收發訊息，但不支援推播通知。
-重簽可以使用 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)。
+* NEIN 需要解密過的 LINE IPA，如果沒有越獄裝置可以自己進行 IPA 解密，則請自行在網路上搜尋現成的 IPA。
+* NEIN 會將主 App 名稱設為 `NEIN`、Bundle ID 設為 `kinta.ma.nein`，並預設使用香蕉圖示。
+* 為避免誤觸原版連結，輸出版本不註冊 URL scheme。
+* 完成後請使用自己的憑證和 provisioning profile 完整重簽名再安裝。修改版可正常收發訊息，但不支援推播通知。
+* 重簽可以使用 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)。
 
 預設使用副裝置模式（偽裝成 iPad 登入），建議使用副裝置先嘗試，以免影響帳號與內容，若要在主帳號嘗試，請務必先備份所有資料。
 
@@ -21,6 +23,8 @@ python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
   jp.naver.line_26.14.0_und3fined.ipa \
   output/NEIN-26.14.0-secondary.ipa
 ```
+
+若要改用 IPA 內其他替代圖示，可以用指定 `--icon` 指令指定圖示。
 
 若要建立保留主手機登入流程的版本，加上 `--primary-login`：
 

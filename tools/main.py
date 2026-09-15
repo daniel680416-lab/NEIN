@@ -26,6 +26,8 @@ REMOVED_ARCHIVE_PREFIXES = (
     'Payload/LINE.app/Watch/',
 )
 DEFAULT_BUNDLE_ID = 'kinta.ma.nein'
+DEFAULT_APP_NAME = 'NEIN'
+DEFAULT_ICON = 'design_simple_banana'
 
 
 @dataclass(frozen=True)
@@ -70,9 +72,26 @@ def is_removed_archive_member(name):
     )
 
 
-def patched_info_plist(info):
+def patched_info_plist(info, icon):
     result = dict(info)
     result['CFBundleIdentifier'] = DEFAULT_BUNDLE_ID
+    result['CFBundleDisplayName'] = DEFAULT_APP_NAME
+    result['CFBundleName'] = DEFAULT_APP_NAME
+    for key in tuple(result):
+        if key.startswith('CFBundleURLTypes'):
+            del result[key]
+    for key in ('CFBundleIcons', 'CFBundleIcons~ipad'):
+        icon_config = info.get(key)
+        if not icon_config:
+            continue
+        result[key] = dict(icon_config)
+        primary_icon = icon_config.get('CFBundlePrimaryIcon', {})
+        selected_icon = icon_config.get('CFBundleAlternateIcons', {}).get(
+            icon, primary_icon if primary_icon.get('CFBundleIconName') == icon else None,
+        )
+        if not selected_icon:
+            raise ValueError(f'Unknown app icon: {icon}')
+        result[key]['CFBundlePrimaryIcon'] = dict(selected_icon)
     return plistlib.dumps(result, fmt=plistlib.FMT_XML, sort_keys=False)
 
 
@@ -152,6 +171,8 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', type=Path, help='Original verified IPA, not a previously patched IPA')
     parser.add_argument('output', type=Path)
+    parser.add_argument('--icon', default=DEFAULT_ICON,
+                        help=f'Use an embedded alternate app icon (default: {DEFAULT_ICON})')
     parser.add_argument('--entry-only', action='store_true',
                         help='Only patch the secondary-login entry; do not compile or inject a compatibility dylib')
     parser.add_argument('--primary-login', action='store_true',
@@ -192,7 +213,7 @@ def main():
         original = source.read(EXECUTABLE)
         info = plistlib.loads(source.read(PLIST))
         profile = find_profile(info, original, args.allow_unverified)
-    output_info = patched_info_plist(info)
+    output_info = patched_info_plist(info, args.icon)
     build, lib_data = (None, None) if args.entry_only else build_compat_dylib(args, info)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.input) as source:
@@ -267,6 +288,9 @@ def main():
                 ),
                 'source_bundle_identifier': info['CFBundleIdentifier'],
                 'bundle_identifier': DEFAULT_BUNDLE_ID,
+                'app_name': DEFAULT_APP_NAME,
+                'app_icon': args.icon,
+                'url_schemes_removed': True,
                 'message_diagnostics': args.message_diagnostics,
                 'remove_ads': args.remove_ads,
                 'hide_promotional_tabs': args.hide_promotional_tabs,
