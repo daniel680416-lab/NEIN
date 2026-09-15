@@ -10,13 +10,19 @@
 
 ### LINE 26.14.0
 
+NEIN 需要 decrypted 過的 LINE IPA，如果沒有越獄裝置可以進行 IPA dump，請自行在網路上搜尋現成的 IPA。
+您需要使用自己的憑證和 provisioning profile 完整重簽名之後安裝，可正常收發訊息，但是沒有推播通知。
+重簽可以使用 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)。
+
+預設使用副裝置模式（偽裝成 iPad 登入），建議使用副裝置先嘗試，以免影響帳號與內容，若要在主帳號嘗試，請務必先備份所有資料。
+
 ```sh
 python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
   jp.naver.line_26.14.0_und3fined.ipa \
   output/LINE-26.14.0-refined-secondary.ipa
 ```
 
-這個命令預設建立副裝置模式。若要建立保留主手機登入流程的版本，加上 `--primary-login`：
+若要建立保留主手機登入流程的版本，加上 `--primary-login`：
 
 ```sh
 python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
@@ -25,21 +31,18 @@ python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
   output/LINE-26.14.0-refined-primary.ipa
 ```
 
-兩種模式都只核對 26.14.0。延伸規則只調整已分析的介面入口與內容區域，不會全域封鎖 LINE 網路請求，也不修改聊天資料。實際結果仍可能受伺服器設定或地區影響，安裝後請在真機逐項驗證。
-
-同樣需要 decrypted 過的 IPA，如果沒有越獄裝置可以進行 dump，請自行在網路上搜尋現成的 IPA。
-此版本使用自己的憑證和 provisioning profile 完整重簽，可收發訊息，但是沒有推播通知。
-重簽可以使用 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)。
+目前 NEIN 兩種模式都只支援 LINE 26.14.0。NEIN 只調整已分析的介面入口與內容區域，不會封鎖網路請求，也不修改聊天資料。實際結果仍可能受伺服器設定或地區影響，安裝後請在真機逐項驗證。
 
 ## 原理 ⚙️
 
-- LINE 會檢查裝置是否為 iPad，工具只修改副裝置登入入口的條件跳轉，不會全域偽裝裝置。
+- LINE 會檢查裝置是否為 iPhone，本工具修改登入入口的條件跳轉為 iPad，不會全域偽裝裝置。
 - 注入相容層，在 App Group 無法使用時改用 App 私有目錄，並處理部分 Keychain 不相容問題。
 - 修改後需以自己的憑證和 provisioning profile 完整重簽。
 - 工具會核對版本、build 和執行檔 SHA-256，只對已分析的版本套用修補。
 
 ## 注意 ⚠️
 
+- 不支援推播通知功能
 - 只支援已核對的版本和 IPA，其他版本會拒絕處理。
 - 請先備份 LINE 資料，再於測試裝置安裝。
 
