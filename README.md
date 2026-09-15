@@ -1,0 +1,48 @@
+# NEIN
+
+為指定版本的 LINE IPA 套用副裝置登入相容性與介面調整。
+
+## 支援版本 📦
+
+| LINE 版本 | 需要越獄 | 安裝方式 | 優點 | 缺點 |
+|---|---|---|---|---|
+| 26.14.0 | 否 | 自己簽署 | 不需要越獄，版本較新 | 需要 iOS 18 以上，沒有推播通知 |
+
+### LINE 26.14.0
+
+```sh
+python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
+  jp.naver.line_26.14.0_und3fined.ipa \
+  output/LINE-26.14.0-refined-secondary.ipa
+```
+
+這個命令預設建立副裝置模式。若要建立保留主手機登入流程的版本，加上 `--primary-login`：
+
+```sh
+python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
+  --primary-login \
+  jp.naver.line_26.14.0_und3fined.ipa \
+  output/LINE-26.14.0-refined-primary.ipa
+```
+
+兩種模式都只核對 26.14.0。延伸規則只調整已分析的介面入口與內容區域，不會全域封鎖 LINE 網路請求，也不修改聊天資料。實際結果仍可能受伺服器設定或地區影響，安裝後請在真機逐項驗證。
+
+同樣需要 decrypted 過的 IPA，如果沒有越獄裝置可以進行 dump，請自行在網路上搜尋現成的 IPA。
+此版本使用自己的憑證和 provisioning profile 完整重簽，可收發訊息，但是沒有推播通知。
+重簽可以使用 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)。
+
+## 原理 ⚙️
+
+- LINE 會檢查裝置是否為 iPad，工具只修改副裝置登入入口的條件跳轉，不會全域偽裝裝置。
+- 注入相容層，在 App Group 無法使用時改用 App 私有目錄，並處理部分 Keychain 不相容問題。
+- 修改後需以自己的憑證和 provisioning profile 完整重簽。
+- 工具會核對版本、build 和執行檔 SHA-256，只對已分析的版本套用修補。
+
+## 注意 ⚠️
+
+- 只支援已核對的版本和 IPA，其他版本會拒絕處理。
+- 請先備份 LINE 資料，再於測試裝置安裝。
+
+## 免責聲明 📄
+
+本專案僅供學術研究、相容性測試與教育用途，為非官方研究與修改工具，與 LINE、NAVER 或 Apple 無關。使用修改後的 IPA 可能造成帳號、聊天資料或通知功能異常，也可能違反相關服務條款。請先備份資料，並確認使用方式符合適用法令及相關服務條款；使用者須自行承擔所有風險與責任。
