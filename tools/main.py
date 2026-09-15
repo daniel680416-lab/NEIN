@@ -20,6 +20,12 @@ NOP = bytes.fromhex('1f2003d5')
 LIB_NAME = 'LINEContainerCompat.dylib'
 LIB_ENTRY = 'Payload/LINE.app/Frameworks/' + LIB_NAME
 LOAD_PATH = '@executable_path/Frameworks/' + LIB_NAME
+APP_ROOT = 'Payload/LINE.app/'
+REMOVED_ARCHIVE_PREFIXES = (
+    'Payload/LINE.app/PlugIns/',
+    'Payload/LINE.app/Watch/',
+)
+DEFAULT_BUNDLE_ID = 'kinta.ma.nein'
 
 
 @dataclass(frozen=True)
@@ -48,6 +54,26 @@ PATCH_PROFILES = (
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def retained_archive_members(names):
+    return [
+        name for name in names
+        if not is_removed_archive_member(name)
+    ]
+
+
+def is_removed_archive_member(name):
+    return (
+        name.startswith(REMOVED_ARCHIVE_PREFIXES) or
+        (name.startswith(APP_ROOT) and '.appex/' in name)
+    )
+
+
+def patched_info_plist(info):
+    result = dict(info)
+    result['CFBundleIdentifier'] = DEFAULT_BUNDLE_ID
+    return plistlib.dumps(result, fmt=plistlib.FMT_XML, sort_keys=False)
 
 
 def find_profile(info, original, allow_unverified=False):
@@ -166,6 +192,7 @@ def main():
         original = source.read(EXECUTABLE)
         info = plistlib.loads(source.read(PLIST))
         profile = find_profile(info, original, args.allow_unverified)
+    output_info = patched_info_plist(info)
     build, lib_data = (None, None) if args.entry_only else build_compat_dylib(args, info)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.input) as source:
@@ -180,19 +207,32 @@ def main():
         with zipfile.ZipFile(args.output, 'x') as target:
             target.comment = source.comment
             for entry in source.infolist():
-                target.writestr(entry, modified if entry.filename == EXECUTABLE else source.read(entry))
+                if is_removed_archive_member(entry.filename):
+                    continue
+                content = (
+                    modified if entry.filename == EXECUTABLE else
+                    output_info if entry.filename == PLIST else
+                    source.read(entry)
+                )
+                target.writestr(entry, content)
             if lib_data is not None:
                 entry = zipfile.ZipInfo(LIB_ENTRY, (2026, 9, 15, 0, 0, 0))
                 entry.create_system = 3
                 entry.external_attr = 0o100755 << 16
                 entry.compress_type = zipfile.ZIP_DEFLATED
                 target.writestr(entry, lib_data)
-    # Full round-trip archive comparison, including the original resources and extensions.
+    # Full round-trip comparison, excluding all embedded app extensions and the
+    # Watch app whose bundle IDs cannot remain valid after the main app is re-signed.
     with zipfile.ZipFile(args.input) as source, zipfile.ZipFile(args.output) as target:
-        if target.namelist() != source.namelist() + ([LIB_ENTRY] if lib_data is not None else []):
+        retained_names = retained_archive_members(source.namelist())
+        if target.namelist() != retained_names + ([LIB_ENTRY] if lib_data is not None else []):
             raise AssertionError('Unexpected member layout')
-        for name in source.namelist():
-            expected = modified if name == EXECUTABLE else source.read(name)
+        for name in retained_names:
+            expected = (
+                modified if name == EXECUTABLE else
+                output_info if name == PLIST else
+                source.read(name)
+            )
             if target.read(name) != expected:
                 raise AssertionError('Unexpected changed member: ' + name)
         if (lib_data is not None and target.read(LIB_ENTRY) != lib_data) or target.testzip() is not None:
@@ -225,7 +265,8 @@ def main():
                 'executable_hash_verified': (
                     digest(original) == profile.executable_sha256
                 ),
-                'bundle_identifier': info['CFBundleIdentifier'],
+                'source_bundle_identifier': info['CFBundleIdentifier'],
+                'bundle_identifier': DEFAULT_BUNDLE_ID,
                 'message_diagnostics': args.message_diagnostics,
                 'remove_ads': args.remove_ads,
                 'hide_promotional_tabs': args.hide_promotional_tabs,
@@ -242,8 +283,10 @@ def main():
                     'Main app only; private fallback containers are not shared with extensions. '
                     'No Keychain remapping.'
                 ),
-                'verification': ('All original archive contents identical except documented Mach-O patches; '
-                                 'one added dylib; ZIP CRC passed; dylib ad hoc signature verified.')}
+                'verification': ('All retained archive contents identical except the updated Info.plist '
+                                 'and documented Mach-O patches; all embedded app extensions and the Watch app were removed; '
+                                 'one dylib was added; ZIP CRC passed; '
+                                 'dylib ad hoc signature verified.')}
     if args.remove_ads or args.hide_promotional_tabs:
         manifest['ad_removal'] = {
             'loader_hooks': args.remove_ads,
@@ -270,7 +313,7 @@ def main():
                       'original_hex': profile.original.hex(), 'patched_hex': NOP.hex(),
                       'original_instruction': profile.instruction, 'patched_instruction': 'nop'},
             'changed_byte_offsets': [hex(i) for i in changed],
-            'verification': 'All other ZIP member contents identical; ZIP CRC and patch verification passed.',
+            'verification': 'All other retained ZIP member contents identical; ZIP CRC and patch verification passed.',
         })
     elif args.primary_login:
         manifest.update({

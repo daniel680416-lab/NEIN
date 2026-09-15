@@ -11,7 +11,7 @@
 ### LINE 26.14.0
 
 NEIN 需要解密過的 LINE IPA，如果沒有越獄裝置可以自己進行 IPA 解密，則請自行在網路上搜尋現成的 IPA。
-您需要使用自己的憑證和 provisioning profile 完整重簽名之後安裝，可正常收發訊息，但是沒有推播通知。
+NEIN 會將主 App 的 Bundle ID 設為 `kinta.ma.nein`，並移除內嵌擴充功能與 Watch app。完成後請使用自己的憑證和 provisioning profile 完整重簽名再安裝。修改版可正常收發訊息，但不支援推播通知。
 重簽可以使用 [AltStore](https://altstore.io/) 或 [Sideloadly](https://sideloadly.io/)。
 
 預設使用副裝置模式（偽裝成 iPad 登入），建議使用副裝置先嘗試，以免影響帳號與內容，若要在主帳號嘗試，請務必先備份所有資料。
@@ -19,7 +19,7 @@ NEIN 需要解密過的 LINE IPA，如果沒有越獄裝置可以自己進行 IP
 ```sh
 python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
   jp.naver.line_26.14.0_und3fined.ipa \
-  output/LINE-26.14.0-refined-secondary.ipa
+  output/NEIN-26.14.0-secondary.ipa
 ```
 
 若要建立保留主手機登入流程的版本，加上 `--primary-login`：
@@ -28,7 +28,7 @@ python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
 python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
   --primary-login \
   jp.naver.line_26.14.0_und3fined.ipa \
-  output/LINE-26.14.0-refined-primary.ipa
+  output/NEIN-26.14.0-primary.ipa
 ```
 
 兩種模式目前都只支援 LINE 26.14.0。
@@ -37,7 +37,7 @@ NEIN 只調整已分析的介面入口與內容區域，不會封鎖網路請求
 ## 建議做法 📱
 
 1. 依照上方步驟建立副裝置版本的 IPA。
-2. 重簽時使用不同的 Bundle ID，請勿沿用原始的 `jp.naver.line`。
+2. 工具會預設使用 `kinta.ma.nein` 作為 Bundle ID；重簽時請保留此設定。
 3. 將修改版安裝到裝置後，即可與原版 LINE 並存。
 4. 保留原版 LINE 可用於接收通知，修改版則用於日常操作，享受順暢的 App 體驗。
 
@@ -51,6 +51,7 @@ NEIN 只調整已分析的介面入口與內容區域，不會封鎖網路請求
 ## 注意 ⚠️
 
 - 不支援推播通知功能
+- 不包含原版的分享、Widget、Siri 與 Apple Watch 擴充功能。
 - 只支援已核對的版本和 IPA，其他版本會拒絕處理。
 - 請先備份 LINE 資料，再於測試裝置安裝。
 

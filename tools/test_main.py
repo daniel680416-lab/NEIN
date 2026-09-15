@@ -1,3 +1,4 @@
+import plistlib
 import struct
 import sys
 import tempfile
@@ -23,6 +24,30 @@ class MainToolTests(unittest.TestCase):
         struct.pack_into('<I', binary, 0, 0xFEEDFACF)
         with self.assertRaises(ValueError):
             main.patched_binary(bytes(binary), profile, verify_hash=False)
+
+    def test_embedded_extensions_and_watch_app_are_excluded(self):
+        names = [
+            'Payload/LINE.app/Info.plist',
+            'Payload/LINE.app/Extensions/LineAppIntentsExtension.appex/',
+            'Payload/LINE.app/Extensions/LineAppIntentsExtension.appex/Info.plist',
+            'Payload/LINE.app/PlugIns/',
+            'Payload/LINE.app/PlugIns/LineShareExtension.appex/Info.plist',
+            'Payload/LINE.app/Watch/',
+            'Payload/LINE.app/Watch/LineWatchKitApp.app/Info.plist',
+        ]
+        self.assertEqual(main.retained_archive_members(names), [
+            'Payload/LINE.app/Info.plist',
+        ])
+
+    def test_output_info_plist_uses_default_bundle_id(self):
+        source = {
+            'CFBundleIdentifier': 'jp.naver.line',
+            'CFBundleShortVersionString': '26.14.0',
+        }
+        output = plistlib.loads(main.patched_info_plist(source))
+        self.assertEqual(output['CFBundleIdentifier'], 'kinta.ma.nein')
+        self.assertEqual(source['CFBundleIdentifier'], 'jp.naver.line')
+        self.assertEqual(output['CFBundleShortVersionString'], '26.14.0')
 
     def test_ad_removal_options_are_parsed(self):
         with tempfile.TemporaryDirectory() as directory:
