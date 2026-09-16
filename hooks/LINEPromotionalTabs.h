@@ -1,20 +1,10 @@
-// Inspect only tab-bar descendants. Never infer a button from class-name
-// substrings or its position in a controller array.
-static BOOL LMExactPromotionalTitle(NSString *text) {
-    NSString *title = [[text stringByTrimmingCharactersInSet:
-                        NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
-    return [@[@"VOOM", @"LINE VOOM", @"NEWS", @"LINE NEWS",
-              @"SHOPPING", @"LINE SHOPPING"] containsObject:title ?: @""];
-}
+#include "LINEPromotionalTabIdentity.h"
 
 static char LMTabOriginalEnabledKey;
 
 static void LMUpdatePromotionalItems(NSArray<UITabBarItem *> *items) {
     for (UITabBarItem *item in items) {
-        // LINE 26.14.0 includes this specific item class. Do not match generic
-        // TabBar/TabItem names or infer item identity from view positions.
-        BOOL promotional = LMExactPromotionalTitle(item.title) ||
-            [NSStringFromClass(item.class) hasSuffix:@"VOOMSkinnedTabBarItem"];
+        BOOL promotional = LMIsPromotionalTabItem(item);
         NSNumber *original = objc_getAssociatedObject(item, &LMTabOriginalEnabledKey);
         if (promotional) {
             if (!original) {

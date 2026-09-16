@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXECUTABLE = 'Payload/LINE.app/LINE'
 PLIST = 'Payload/LINE.app/Info.plist'
 NOP = bytes.fromhex('1f2003d5')
-LIB_NAME = 'LINEContainerCompat.dylib'
+LIB_NAME = 'LINEHooks.dylib'
 LIB_ENTRY = 'Payload/LINE.app/Frameworks/' + LIB_NAME
 LOAD_PATH = '@executable_path/Frameworks/' + LIB_NAME
 APP_ROOT = 'Payload/LINE.app/'
@@ -446,7 +446,7 @@ def build_compat_dylib(args, info):
                     *(['-framework', 'WebKit', '-I', str(build)]
                       if args.remove_ads else []),
                     '-Wl,-install_name,' + LOAD_PATH,
-                    str(ROOT / 'compat' / 'LINEContainerCompat.m'), '-o', str(lib)], check=True)
+                    str(ROOT / 'hooks' / 'LINEHooks.m'), '-o', str(lib)], check=True)
     subprocess.run(['codesign', '--force', '--sign', '-', str(lib)], check=True)
     subprocess.run(['codesign', '--verify', '--strict', str(lib)], check=True)
     lib_data = lib.read_bytes()

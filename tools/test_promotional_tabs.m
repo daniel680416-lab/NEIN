@@ -64,11 +64,11 @@ enum { UIUserInterfaceLayoutDirectionLeftToRight = 0 };
 @end
 @implementation UITabBar @end
 
-#include "../compat/LINEPromotionalTabs.h"
-#include "../compat/LINEVisibleTabModel.h"
-#include "../compat/LINECompactTabs.h"
+#include "../hooks/LINEPromotionalTabs.h"
+#include "../hooks/LINEVisibleTabModel.h"
+#include "../hooks/LINECompactTabs.h"
 #define LM_TAB_DIAGNOSTICS_SNAPSHOT_ONLY 1
-#include "../compat/LINETabDiagnostics.h"
+#include "../hooks/LINETabDiagnostics.h"
 
 static UIView *TestView(NSString *name, BOOL control, CGRect frame) {
     Class cls = NSClassFromString(name);

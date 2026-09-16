@@ -1,6 +1,7 @@
 // Read-only observations of the post-login path. Never inspect message bodies,
 // credentials, request headers, error descriptions, or error userInfo.
 #import <objc/message.h>
+#include "LINEObjCRuntime.h"
 
 static BOOL LMMTake(NSString *key) {
     static NSLock *lock;
@@ -16,12 +17,11 @@ static BOOL LMMTake(NSString *key) {
 }
 
 static void LMMEvent(NSString *event, NSString *fields) {
-    if (LMDLogging) return;
-    LMDLogging = YES;
+    if (!LMDBeginLogging()) return;
     if (LMMTake([event stringByAppendingString:fields]))
         LMDEmit([NSString stringWithFormat:@"[LINELoginDiag] message event=%@ %@ frames=%@",
                  event, fields, LMDLINEFrames()]);
-    LMDLogging = NO;
+    LMDEndLogging();
 }
 
 static void LMMError(id error, NSString *event) {
@@ -38,15 +38,8 @@ static Method LMMMethod(NSString *className, BOOL meta, NSString *name,
     Class cls = NSClassFromString(className);
     if (meta) cls = object_getClass(cls);
     Method method = cls ? class_getInstanceMethod(cls, NSSelectorFromString(name)) : NULL;
-    if (!method || method_getNumberOfArguments(method) != (argument ? 3u : 2u)) return NULL;
-    char type[64] = {0};
-    method_getReturnType(method, type, sizeof(type));
-    if (strcmp(type, result)) return NULL;
-    if (argument) {
-        method_getArgumentType(method, 2, type, sizeof(type));
-        if (strcmp(type, argument)) return NULL;
-    }
-    return method;
+    return LMMethodHasType(method, result, argument ? 3u : 2u, argument, NULL)
+        ? method : NULL;
 }
 
 static BOOL LMMVoidHook(NSString *cls, BOOL meta, NSString *name, NSString *event) {
@@ -122,6 +115,8 @@ static void LMInstallMessageDiagnostics(void) {
         for (NSString *name in @[@"isNetworkError:", @"isTalkError:", @"isFatalError:",
               @"isNotAllowedSecondaryDeviceError:", @"isNotAvailableSession:"])
             installed += LMMErrorHook(name);
-        LMDEmit([NSString stringWithFormat:@"[LINELoginDiag] v6 message diagnostics loaded; hooks=%u/15; read-only", installed]);
+        LMDEmit([NSString stringWithFormat:
+            @"[LINELoginDiag] %@ message diagnostics loaded; hooks=%u/15; read-only",
+            LMDVersion, installed]);
     });
 }

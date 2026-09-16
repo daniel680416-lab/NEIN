@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #include <assert.h>
 
-#include "../compat/LINEAdDomainMatcher.h"
+#include "../hooks/LINEAdDomainMatcher.h"
 
 int main(void) {
     @autoreleasepool {

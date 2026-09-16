@@ -101,7 +101,7 @@ static void LMOpenLineSettings(UITabBarController *controller) {
     (void)controller; settingsOpened++;
 }
 
-#include "../compat/LINEVisibleTabBar.h"
+#include "../hooks/LINEVisibleTabBar.h"
 
 @interface TestDelegate : NSObject <UITabBarControllerDelegate>
 @property BOOL deny;

@@ -2,29 +2,25 @@
 // This is app-private storage. It is NOT shared with app extensions.
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#include "LINEAppGroups.h"
 #ifdef LINE_MULTI_DIAGNOSTICS
 #include "LINELoginDiagnostics.m"
 #endif
 #ifdef LINE_MULTI_KEYCHAIN_COMPAT
-#include "LINEKeychainCompat.m"
+#include "LINEKeychainHooks.m"
 #endif
 #ifdef LINE_MULTI_MESSAGE_DIAGNOSTICS
 #include "LINEMessageDiagnostics.m"
 #endif
 #if defined(LINE_MULTI_REMOVE_ADS) || defined(LINE_MULTI_HIDE_PROMOTIONAL_TABS)
-#include "LINEAdRemovalCompat.m"
+#include "LINEAdRemovalHooks.m"
 #endif
 #ifdef LINE_MULTI_REMOVE_ADS
-#include "LINEAdNetworkBlockCompat.m"
+#include "LINEAdNetworkHooks.m"
 #endif
 
 typedef NSURL *(*LMContainerIMP)(id, SEL, NSString *);
 static LMContainerIMP LMOriginalContainer;
-
-static BOOL LMIsLINEGroup(NSString *identifier) {
-    return [identifier isEqualToString:@"group.com.linecorp.line"] ||
-           [identifier isEqualToString:@"group.share.com.linecorp.line"];
-}
 
 static NSURL *LMLocalContainer(NSFileManager *manager, NSString *identifier) {
     // Exact allowlist above makes the last component safe as a directory name.
@@ -51,7 +47,7 @@ static NSURL *LMLocalContainer(NSFileManager *manager, NSString *identifier) {
 
 static NSURL *LMContainerURL(id receiver, SEL selector, NSString *identifier) {
     NSURL *original = LMOriginalContainer(receiver, selector, identifier);
-    NSURL *fallback = (!original && LMIsLINEGroup(identifier))
+    NSURL *fallback = (!original && LMIsLINEAppGroup(identifier))
                       ? LMLocalContainer(receiver, identifier) : nil;
 #ifdef LINE_MULTI_DIAGNOSTICS
     LMDLogContainer(identifier, original != nil, fallback != nil);
@@ -94,7 +90,7 @@ static void LMInstallContainerFallback(void) {
 }
 
 #ifndef LINE_MULTI_TESTING
-__attribute__((constructor)) static void LMContainerCompatLoad(void) {
+__attribute__((constructor)) static void LMHooksLoad(void) {
     @autoreleasepool {
         // The dylib is loaded only by the main LINE executable, even if its
         // bundle identifier changes during signing. Do not activate in appex.

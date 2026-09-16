@@ -2,6 +2,7 @@
 // request/response bodies, Keychain queries, account identifiers, or secrets.
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#include "LINEAppGroups.h"
 #include <dlfcn.h>
 #include <execinfo.h>
 #include <stdatomic.h>
@@ -10,6 +11,20 @@
 
 static _Thread_local BOOL LMDLogging;
 static atomic_uint LMDErrorCount, LMDLocalizationCount, LMDContainerCount;
+static NSString * const LMDVersion = @"v7";
+static const unsigned LMDMaximumEventCount = 80;
+static const unsigned LMDMaximumDuplicateCount = 3;
+static const NSUInteger LMDMaximumErrorKeys = 512;
+
+static BOOL LMDBeginLogging(void) {
+    if (LMDLogging) return NO;
+    LMDLogging = YES;
+    return YES;
+}
+
+static void LMDEndLogging(void) {
+    LMDLogging = NO;
+}
 
 // Callers pass only sanitized fields. Explicit public visibility is necessary:
 // NSLog's interpolated strings were redacted on the user's iOS 27 device.
@@ -29,21 +44,31 @@ static BOOL LMDInterestingKey(NSString *key) {
 
 static NSString *LMDSafeDomain(NSString *domain) {
     // Only fixed, known domains are emitted. Unknown domains may contain data.
-    NSArray *allowed = @[@"NSOSStatusErrorDomain", @"NSCocoaErrorDomain",
-        @"NSPOSIXErrorDomain", @"NSURLErrorDomain", @"SAMKeychainErrorDomain",
-        @"SecondAuthFactorPinCodeErrorDomain", @"LoginQRCodeErrorDomain",
-        @"SecondaryPwlessLoginErrorDomain", @"RegistrationErrorDomain",
-        @"CommonCryptoErrorDomain", @"LEGYHTTPErrorDomain",
-        @"AccessTokenRefreshErrorDomain", @"AuthAccountReloginErrorDomain",
-        // Additional fixed names found in this exact executable's strings.
-        @"TalkThriftErrorDomain", @"LEGYErrorDomain", @"SSServerErrorDomain",
-        @"VGuardErrorDomain", @"NLChannelGatewayErrorDomain", @"LIFFErrorDomain",
-        @"ChannelPaakAuthnErrorDomain", @"PwlessCredentialErrorDomain",
-        @"AccountRestoreErrorDomain", @"PrimaryQrCodeMigrationErrorDomain",
-        @"LineEAPIntegrateErrorDomain", @"AccountAuthFactorEapConnectErrorDomain",
-        @"LineAuthSeamlessLoginLineAuthSeamlessLoginErrorDomain",
-        @"LineAuthPrimaryAccountInitFeatureQueryLineAuthPrimaryAccountInitFeatureQueryErrorDomain"];
+    static NSSet<NSString *> *allowed;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        allowed = [NSSet setWithArray:@[
+            @"NSOSStatusErrorDomain", @"NSCocoaErrorDomain",
+            @"NSPOSIXErrorDomain", @"NSURLErrorDomain", @"SAMKeychainErrorDomain",
+            @"SecondAuthFactorPinCodeErrorDomain", @"LoginQRCodeErrorDomain",
+            @"SecondaryPwlessLoginErrorDomain", @"RegistrationErrorDomain",
+            @"CommonCryptoErrorDomain", @"LEGYHTTPErrorDomain",
+            @"AccessTokenRefreshErrorDomain", @"AuthAccountReloginErrorDomain",
+            // Additional fixed names found in this exact executable's strings.
+            @"TalkThriftErrorDomain", @"LEGYErrorDomain", @"SSServerErrorDomain",
+            @"VGuardErrorDomain", @"NLChannelGatewayErrorDomain", @"LIFFErrorDomain",
+            @"ChannelPaakAuthnErrorDomain", @"PwlessCredentialErrorDomain",
+            @"AccountRestoreErrorDomain", @"PrimaryQrCodeMigrationErrorDomain",
+            @"LineEAPIntegrateErrorDomain", @"AccountAuthFactorEapConnectErrorDomain",
+            @"LineAuthSeamlessLoginLineAuthSeamlessLoginErrorDomain",
+            @"LineAuthPrimaryAccountInitFeatureQueryLineAuthPrimaryAccountInitFeatureQueryErrorDomain",
+        ]];
+    });
     return [allowed containsObject:domain ?: @""] ? domain : @"other-redacted";
+}
+
+static NSString *LMDSafeGroup(NSString *identifier) {
+    return LMIsLINEAppGroup(identifier) ? identifier : @"other-redacted";
 }
 
 static NSString *LMDLINEFrames(void) {
@@ -71,35 +96,32 @@ static BOOL LMDShouldEmitError(NSString *domain, NSInteger code, NSString *frame
     NSString *key = [NSString stringWithFormat:@"%@|%ld|%@", domain ?: @"", (long)code, frames];
     [lock lock];
     NSNumber *previous = counts[key];
-    BOOL emit = previous ? previous.unsignedIntValue < 3 : counts.count < 512;
+    BOOL emit = previous
+        ? previous.unsignedIntValue < LMDMaximumDuplicateCount
+        : counts.count < LMDMaximumErrorKeys;
     if (emit) counts[key] = @(previous.unsignedIntValue + 1);
     [lock unlock];
     return emit;
 }
 
 static void LMDLogError(NSString *domain, NSInteger code, const char *origin) {
-    if (LMDLogging) return;
-    LMDLogging = YES;
+    if (!LMDBeginLogging()) return;
     NSString *frames = LMDLINEFrames();
     if (LMDShouldEmitError(domain, code, frames)) {
         atomic_fetch_add(&LMDErrorCount, 1);
         LMDEmit([NSString stringWithFormat:@"[LINELoginDiag] error origin=%s domain=%@ code=%ld frames=%@",
               origin, LMDSafeDomain(domain), (long)code, frames]);
     }
-    LMDLogging = NO;
+    LMDEndLogging();
 }
 
 static void LMDLogContainer(NSString *identifier, BOOL original, BOOL fallback) {
-    if (LMDLogging) return;
-    LMDLogging = YES;
-    if (atomic_fetch_add(&LMDContainerCount, 1) < 80) {
-        NSString *group = ([identifier isEqualToString:@"group.com.linecorp.line"] ||
-                          [identifier isEqualToString:@"group.share.com.linecorp.line"])
-                          ? identifier : @"other-redacted";
+    if (!LMDBeginLogging()) return;
+    if (atomic_fetch_add(&LMDContainerCount, 1) < LMDMaximumEventCount) {
         LMDEmit([NSString stringWithFormat:@"[LINELoginDiag] container group=%@ original=%d fallback=%d frames=%@",
-              group, original, fallback, LMDLINEFrames()]);
+              LMDSafeGroup(identifier), original, fallback, LMDLINEFrames()]);
     }
-    LMDLogging = NO;
+    LMDEndLogging();
 }
 
 typedef NSString *(*LMDLocalizedIMP)(id, SEL, NSString *, NSString *, NSString *);
@@ -107,11 +129,10 @@ static LMDLocalizedIMP LMDOriginalLocalized;
 static NSString *LMDLocalized(id receiver, SEL selector, NSString *key,
                               NSString *value, NSString *table) {
     NSString *result = LMDOriginalLocalized(receiver, selector, key, value, table);
-    if (!LMDLogging && LMDInterestingKey(key)) {
-        LMDLogging = YES;
-        if (atomic_fetch_add(&LMDLocalizationCount, 1) < 80)
+    if (LMDInterestingKey(key) && LMDBeginLogging()) {
+        if (atomic_fetch_add(&LMDLocalizationCount, 1) < LMDMaximumEventCount)
             LMDEmit([NSString stringWithFormat:@"[LINELoginDiag] error-text key=%@ frames=%@", key, LMDLINEFrames()]);
-        LMDLogging = NO;
+        LMDEndLogging();
     }
     return result;
 }
@@ -159,6 +180,8 @@ static void LMInstallLoginDiagnostics(void) {
         method_setImplementation(localized, (IMP)LMDLocalized);
         method_setImplementation(errorInit, (IMP)LMDErrorInit);
         method_setImplementation(errorFactory, (IMP)LMDErrorFactory);
-        LMDEmit(@"[LINELoginDiag] v3 diagnostics loaded; public sanitized fields; duplicate errors limited");
+        LMDEmit([NSString stringWithFormat:
+            @"[LINELoginDiag] %@ diagnostics loaded; public sanitized fields; duplicate errors limited",
+            LMDVersion]);
     });
 }

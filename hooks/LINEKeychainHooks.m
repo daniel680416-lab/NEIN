@@ -16,7 +16,6 @@ static OSStatus (*LMKUpdate)(CFDictionaryRef, CFDictionaryRef) = SecItemUpdate;
 #define LMK_IMAGE_NAME "LINE"
 #define LMK_GOT_ADDRESS 0x10b377cd8ULL
 #define LMK_GOT_OFFSET 0xb377cd8ULL
-#define LMK_VERSION @"v7 keychain hooks installed; E2EE and exact authentication-store group retry"
 
 static OSStatus LMKCall(unsigned op, CFDictionaryRef query, CFDictionaryRef attributes, CFTypeRef *result) {
     switch (op) {
@@ -50,8 +49,8 @@ static OSStatus LMKPerform(unsigned op, CFDictionaryRef query, CFDictionaryRef a
     if (!authQuery && (caller < 0x3d63000 || caller >= 0x3d64200)) {
 #ifdef LINE_MULTI_MESSAGE_DIAGNOSTICS
         // Observe other failures without changing their query or result.
-        if ((initial != errSecSuccess || (caller >= 0x37c6e7c && caller < 0x37c7200)) && !LMDLogging) {
-            LMDLogging = YES;
+        if ((initial != errSecSuccess || (caller >= 0x37c6e7c && caller < 0x37c7200)) &&
+            LMDBeginLogging()) {
             NSString *key = [NSString stringWithFormat:@"keychain-%u-%d-%lx", op, (int)initial, (unsigned long)caller];
             if (LMDShouldEmitError(key, initial, @"")) {
                 static const char *names[] = {"add", "copy", "delete", "update"};
@@ -60,7 +59,7 @@ static OSStatus LMKPerform(unsigned op, CFDictionaryRef query, CFDictionaryRef a
                     query && CFDictionaryContainsKey(query, kSecAttrAccessGroup),
                     attributes && CFDictionaryContainsKey(attributes, kSecAttrAccessGroup), (unsigned long)caller]);
             }
-            LMDLogging = NO;
+            LMDEndLogging();
         }
 #endif
         return initial;
@@ -189,7 +188,9 @@ static void LMKTryInstallKeychainCompat(void) {
                                (uintptr_t)LMKDeleteHook, (uintptr_t)LMKUpdateHook};
     BOOL installed = LMKReplaceSlots((uintptr_t *)(LMKBase + LMK_GOT_OFFSET), expected, replacement);
     if (installed) LMKInstalled = YES;
-    LMDEmit([NSString stringWithFormat:@"[LINELoginDiag] %@ installed=%d", LMK_VERSION, installed]);
+    LMDEmit([NSString stringWithFormat:
+        @"[LINELoginDiag] %@ keychain hooks installed; E2EE and exact authentication-store group retry installed=%d",
+        LMDVersion, installed]);
 }
 
 static void LMKImageAdded(const struct mach_header *header, intptr_t slide) {

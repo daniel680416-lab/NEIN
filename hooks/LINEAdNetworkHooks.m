@@ -4,6 +4,7 @@
 
 #include "LINEAdDomains.h"
 #include "LINEAdDomainMatcher.h"
+#include "LINEObjCRuntime.h"
 
 typedef NSURLSessionConfiguration *(*LMConfigurationClassIMP)(id, SEL);
 typedef void (*LMSetProtocolClassesIMP)(id, SEL, NSArray<Class> *);
@@ -77,14 +78,6 @@ static void LMSetProtocolClasses(id self, SEL selector, NSArray<Class> *classes)
     LMOriginalSetProtocolClasses(self, selector, updated);
 }
 
-static BOOL LMHookConfigurationClassMethod(SEL selector, IMP replacement, IMP *original) {
-    Method method = class_getClassMethod(NSURLSessionConfiguration.class, selector);
-    if (!LMMethodHasType(method, "@", 2, NULL, NULL)) return NO;
-    if (original) *original = method_getImplementation(method);
-    method_setImplementation(method, replacement);
-    return YES;
-}
-
 static LMWKLoadRequestIMP LMOriginalWKLoadRequest;
 
 static WKNavigation *LMWKLoadRequest(id self, SEL selector, NSURLRequest *request) {
@@ -99,12 +92,12 @@ static void LMInstallAdNetworkBlock(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         [NSURLProtocol registerClass:LMAdBlockingURLProtocol.class];
-        LMHookConfigurationClassMethod(@selector(defaultSessionConfiguration),
-                                       (IMP)LMDefaultConfiguration,
-                                       (IMP *)&LMOriginalDefaultConfiguration);
-        LMHookConfigurationClassMethod(@selector(ephemeralSessionConfiguration),
-                                       (IMP)LMEphemeralConfiguration,
-                                       (IMP *)&LMOriginalEphemeralConfiguration);
+        LMHookClassMethod(NSURLSessionConfiguration.class,
+                          @selector(defaultSessionConfiguration), "@", 2, NULL, NULL,
+                          (IMP)LMDefaultConfiguration, (IMP *)&LMOriginalDefaultConfiguration);
+        LMHookClassMethod(NSURLSessionConfiguration.class,
+                          @selector(ephemeralSessionConfiguration), "@", 2, NULL, NULL,
+                          (IMP)LMEphemeralConfiguration, (IMP *)&LMOriginalEphemeralConfiguration);
         LMHook(NSURLSessionConfiguration.class, @selector(setProtocolClasses:), "v", 3,
                "@", NULL, (IMP)LMSetProtocolClasses, (IMP *)&LMOriginalSetProtocolClasses);
         LMHook(WKWebView.class, @selector(loadRequest:), "@", 3, "@", NULL,

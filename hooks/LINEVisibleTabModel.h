@@ -1,10 +1,8 @@
 // Keep model indices intact. Only the separate presentation bar is filtered.
+#include "LINEPromotionalTabIdentity.h"
+
 static BOOL LMVisibleTabIsPromotional(UITabBarItem *item) {
-    NSString *title = [[item.title stringByTrimmingCharactersInSet:
-                       NSCharacterSet.whitespaceAndNewlineCharacterSet] uppercaseString];
-    return [@[@"VOOM", @"LINE VOOM", @"NEWS", @"LINE NEWS",
-              @"SHOPPING", @"LINE SHOPPING"] containsObject:title ?: @""] ||
-           [NSStringFromClass(item.class) hasSuffix:@"VOOMSkinnedTabBarItem"];
+    return LMIsPromotionalTabItem(item);
 }
 
 static NSArray<NSNumber *> *LMVisibleTabIndices(NSArray<UITabBarItem *> *items) {
