@@ -1,4 +1,5 @@
 #include "LINEVisibleTabModel.h"
+#include "LINEHomeTapSequence.h"
 
 static char LMVisibleTabBarKey;
 static char LMVisibleTabSourceOwnerKey;
@@ -22,6 +23,7 @@ static char LMVisibleTabSourceOwnerKey;
 @property(nonatomic) BOOL updating;
 @property(nonatomic) BOOL suppressingSourceAppearance;
 @property(nonatomic) NSUInteger lastVisibleIndex;
+@property(nonatomic, strong) NSMutableArray<NSNumber *> *homeTapTimes;
 - (void)update;
 - (void)deactivate;
 - (BOOL)matchesCurrentModel;
@@ -32,6 +34,7 @@ static char LMVisibleTabSourceOwnerKey;
 - (instancetype)init {
     if ((self = [super init])) {
         _lastVisibleIndex = NSNotFound;
+        _homeTapTimes = [NSMutableArray new];
         _bar = [[UITabBar alloc] initWithFrame:CGRectZero];
         _bar.delegate = self;
         _bar.itemPositioning = UITabBarItemPositioningFill;
@@ -62,6 +65,7 @@ static char LMVisibleTabSourceOwnerKey;
     }
     self.active = NO;
     self.lastVisibleIndex = NSNotFound;
+    [self.homeTapTimes removeAllObjects];
     [self.bar removeFromSuperview];
 }
 
@@ -86,6 +90,7 @@ static char LMVisibleTabSourceOwnerKey;
         }
     }
     if (self.bar.hidden != hidden) self.bar.hidden = hidden;
+    if (hidden) [self.homeTapTimes removeAllObjects];
 }
 
 - (void)update {
@@ -109,6 +114,7 @@ static char LMVisibleTabSourceOwnerKey;
         self.indices = indices;
         if (rebuild) {
             self.lastVisibleIndex = NSNotFound;
+            [self.homeTapTimes removeAllObjects];
             NSMutableArray *copies = [NSMutableArray new];
             for (NSNumber *index in indices) {
                 UITabBarItem *item = items[index.unsignedIntegerValue];
@@ -174,12 +180,14 @@ static char LMVisibleTabSourceOwnerKey;
     if (index >= self.indices.count) return;
     NSUInteger original = self.indices[index].unsignedIntegerValue;
     UITabBarItem *source = self.sourceItems[original];
+    if (!LMIsHomeTabTitle(source.title)) [self.homeTapTimes removeAllObjects];
     if (LMVisibleTabIsPromotional(source) || !source.enabled) { [self update]; return; }
     UITabBarController *controller = self.controller;
     UIViewController *destination = self.sourceControllers[original];
     id<UITabBarControllerDelegate> delegate = controller.delegate;
     if ([delegate respondsToSelector:@selector(tabBarController:shouldSelectViewController:)] &&
         ![delegate tabBarController:controller shouldSelectViewController:destination]) {
+        [self.homeTapTimes removeAllObjects];
         [self update];
         return;
     }
@@ -190,6 +198,10 @@ static char LMVisibleTabSourceOwnerKey;
         [delegate tabBarController:controller didSelectViewController:destination];
     }
     [self update];
+    BOOL home = controller.selectedViewController == destination && LMIsHomeTabTitle(source.title);
+    if (LMRecordHomeTap(self.homeTapTimes, NSProcessInfo.processInfo.systemUptime, home)) {
+        LMOpenLineSettings(controller);
+    }
 }
 @end
 

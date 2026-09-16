@@ -96,6 +96,11 @@ enum { UITabBarItemPositioningFill = 1 };
 @end
 @implementation UITabBarController @end
 
+static NSUInteger settingsOpened;
+static void LMOpenLineSettings(UITabBarController *controller) {
+    (void)controller; settingsOpened++;
+}
+
 #include "../compat/LINEVisibleTabBar.h"
 
 @interface TestDelegate : NSObject <UITabBarControllerDelegate>
@@ -113,6 +118,15 @@ enum { UITabBarItemPositioningFill = 1 };
 
 int main(void) {
     @autoreleasepool {
+        NSMutableArray<NSNumber *> *tapTimes = [NSMutableArray new];
+        for (NSUInteger i = 0; i < 9; i++) assert(!LMRecordHomeTap(tapTimes, i * 0.5, YES));
+        assert(LMRecordHomeTap(tapTimes, 5, YES));
+        assert(tapTimes.count == 0);
+        for (NSUInteger i = 0; i < 9; i++) assert(!LMRecordHomeTap(tapTimes, 10 + i * 0.5, YES));
+        assert(!LMRecordHomeTap(tapTimes, 15.01, YES));
+        assert(!LMRecordHomeTap(tapTimes, 15.02, NO) && tapTimes.count == 0);
+        assert(!LMRecordHomeTap(tapTimes, NAN, YES));
+        assert(LMIsHomeTabTitle(@"首頁") && !LMIsHomeTabTitle(@"聊天"));
         UIView *root = [UIView new];
         UITabBarController *controller = [UITabBarController new];
         controller.tabBar = [[UITabBar alloc] initWithFrame:CGRectMake(0, 790, 402, 83)];
@@ -136,6 +150,14 @@ int main(void) {
         assert(controller.tabBar.alpha == 0 && !controller.tabBar.userInteractionEnabled);
         assert(controller.tabBar.accessibilityElementsHidden);
         assert(controller.tabBar.items.count == 4 && controller.viewControllers.count == 4);
+        for (NSUInteger i = 0; i < 9; i++) {
+            [presentation.homeTapTimes addObject:@(NSProcessInfo.processInfo.systemUptime)];
+        }
+        [presentation tabBar:presentation.bar didSelectItem:presentation.bar.items[0]];
+        assert(settingsOpened == 1 && presentation.homeTapTimes.count == 0);
+        controller.selectedViewController = controllers[1];
+        delegate.notifications = 0;
+        LMUpdateVisibleTabBar(controller);
         assert(((UITabBarItem *)items[2]).enabled);
         assert(LMVisibleSourceAlpha(controller.tabBar, 0) == 0);
         LMSyncSourceTabVisibility(controller.tabBar);

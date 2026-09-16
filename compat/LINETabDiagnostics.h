@@ -51,7 +51,7 @@ static NSDictionary *LMTDView(UIView *view, NSUInteger depth, NSUInteger *remain
     }
     NSDictionary *report = @{
         @"schema": @1,
-        @"build": @"v16-native-tabs",
+        @"build": @"v17-home-settings",
         @"phase": @"native_presentation",
         @"tab_bar": LMTDView(controller.tabBar, 0, &remaining),
         @"items": items,

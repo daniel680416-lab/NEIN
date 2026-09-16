@@ -321,6 +321,7 @@ def main():
             'loader_hooks': args.remove_ads,
             'known_ad_view_hiding': args.remove_ads,
             'promotional_tab_filter': args.hide_promotional_tabs,
+            'home_settings_shortcut': args.hide_promotional_tabs,
             'scope': [
                 'GADAdLoader and GADBannerView request entry points',
                 'Google IMA request/start entry points',

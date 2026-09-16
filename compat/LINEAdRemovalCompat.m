@@ -149,6 +149,21 @@ static void LMViewControllerDidAppear(id self, SEL selector, BOOL animated) {
     if (view) LMHideAdvertisingSubviews(view);
 }
 
+static void LMOpenLineSettings(UITabBarController *controller) {
+    // Route inside this app. UIApplication.openURL could launch the original LINE.
+    if (!controller.viewIfLoaded.window || controller.presentedViewController) return;
+    id<UIApplicationDelegate> delegate = UIApplication.sharedApplication.delegate;
+    SEL selector = @selector(application:openURL:options:);
+    NSURL *url = [NSURL URLWithString:@"line://nv/settings"];
+    if ([delegate respondsToSelector:selector] &&
+        [delegate application:UIApplication.sharedApplication openURL:url options:@{}]) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"NEIN"
+        message:@"此版本無法透過內部路由開啟設定，請使用首頁齒輪。"
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [controller presentViewController:alert animated:YES completion:nil];
+}
+
 #include "LINEVisibleTabBar.h"
 #ifdef LINE_MULTI_TAB_DIAGNOSTICS
 #include "LINETabDiagnostics.h"
