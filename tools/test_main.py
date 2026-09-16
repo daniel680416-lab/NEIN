@@ -123,15 +123,23 @@ class MainToolTests(unittest.TestCase):
         self.assertTrue(args.remove_ads)
         self.assertTrue(args.hide_promotional_tabs)
 
-    def test_aggressive_ad_removal_enables_standard_removal(self):
+    def test_ad_removal_option_enables_network_blocking(self):
         with tempfile.TemporaryDirectory() as directory:
             args = main.parse_args([
                 str(Path(directory) / 'input.ipa'),
                 str(Path(directory) / 'output.ipa'),
-                '--aggressive-remove-ads',
+                '--remove-ads',
             ])
-        self.assertTrue(args.aggressive_remove_ads)
         self.assertTrue(args.remove_ads)
+
+    def test_ad_removal_has_no_separate_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = main.parse_args([
+                str(Path(directory) / 'input.ipa'),
+                str(Path(directory) / 'output.ipa'),
+                '--remove-ads',
+            ])
+        self.assertNotIn('aggressive_remove_ads', vars(args))
 
     def test_ad_domain_list_is_unique_and_buildable(self):
         domains = main.load_ad_domains()

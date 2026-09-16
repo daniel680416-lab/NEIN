@@ -288,7 +288,7 @@ static void LMSetVisibleSelectedController(id self, SEL selector, UIViewControll
 }
 
 static void LMInstallAdvertisingLoaderHooks(void) {
-#ifndef LINE_MULTI_AGGRESSIVE_REMOVE_ADS
+#ifndef LINE_MULTI_REMOVE_ADS
     Class gadLoader = NSClassFromString(@"GADAdLoader");
     if (gadLoader) {
         LMHook(gadLoader, @selector(loadRequest:), "v", 3, "@", NULL,
@@ -347,7 +347,7 @@ static void LMInstallAdvertisingLoaderHooks(void) {
                "@", "@", (IMP)LMFailAdLoad, NULL);
     }
 
-#ifndef LINE_MULTI_AGGRESSIVE_REMOVE_ADS
+#ifndef LINE_MULTI_REMOVE_ADS
     Class imaLoader = NSClassFromString(@"IMAAdsLoader");
     if (imaLoader) {
         LMHook(imaLoader, @selector(requestAdsWithRequest:), "v", 3, "@", NULL,

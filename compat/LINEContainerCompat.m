@@ -14,7 +14,7 @@
 #if defined(LINE_MULTI_REMOVE_ADS) || defined(LINE_MULTI_HIDE_PROMOTIONAL_TABS)
 #include "LINEAdRemovalCompat.m"
 #endif
-#ifdef LINE_MULTI_AGGRESSIVE_REMOVE_ADS
+#ifdef LINE_MULTI_REMOVE_ADS
 #include "LINEAdNetworkBlockCompat.m"
 #endif
 
@@ -125,7 +125,7 @@ __attribute__((constructor)) static void LMContainerCompatLoad(void) {
 #endif
             );
 #endif
-#ifdef LINE_MULTI_AGGRESSIVE_REMOVE_ADS
+#ifdef LINE_MULTI_REMOVE_ADS
             LMInstallAdNetworkBlock();
 #endif
         }
