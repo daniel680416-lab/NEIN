@@ -13,6 +13,8 @@ import struct
 import subprocess
 import zipfile
 
+import scan_ad_domains
+
 ROOT = Path(__file__).resolve().parents[1]
 EXECUTABLE = 'Payload/LINE.app/LINE'
 PLIST = 'Payload/LINE.app/Info.plist'
@@ -28,6 +30,7 @@ REMOVED_ARCHIVE_PREFIXES = (
 DEFAULT_BUNDLE_ID = 'kinta.ma.nein'
 DEFAULT_APP_NAME = 'NEIN'
 DEFAULT_ICON = 'design_simple_banana'
+AD_DOMAIN_LIST = ROOT / 'ad_domains.txt'
 
 
 @dataclass(frozen=True)
@@ -185,6 +188,8 @@ def parse_args(argv=None):
                         help='Read-only post-login observations; includes current Keychain compatibility')
     parser.add_argument('--remove-ads', action='store_true',
                         help='Disable audited ad loaders and remove known ad views (26.14.0 only)')
+    parser.add_argument('--aggressive-remove-ads', action='store_true',
+                        help='Also block audited ad domains and return controlled SDK load failures')
     parser.add_argument('--hide-promotional-tabs', action='store_true',
                         help='Hide VOOM, News and Shopping tab buttons (26.14.0 only)')
     parser.add_argument('--tab-diagnostics', action='store_true',
@@ -198,6 +203,8 @@ def parse_args(argv=None):
         args.keychain_compat = True
     if args.keychain_compat:
         args.diagnostics = True
+    if args.aggressive_remove_ads:
+        args.remove_ads = True
     if args.entry_only and (args.diagnostics or args.remove_ads or
                             args.hide_promotional_tabs):
         parser.error('--entry-only cannot be combined with diagnostics, compatibility hooks, or ad removal.')
@@ -297,6 +304,7 @@ def main():
                 'url_schemes_removed': True,
                 'message_diagnostics': args.message_diagnostics,
                 'remove_ads': args.remove_ads,
+                'aggressive_remove_ads': args.aggressive_remove_ads,
                 'hide_promotional_tabs': args.hide_promotional_tabs,
                 'tab_diagnostics': args.tab_diagnostics,
                 'source_ipa_sha256': digest(args.input.read_bytes()),
@@ -320,6 +328,7 @@ def main():
         manifest['ad_removal'] = {
             'loader_hooks': args.remove_ads,
             'known_ad_view_hiding': args.remove_ads,
+            'aggressive_network_blocking': args.aggressive_remove_ads,
             'promotional_tab_filter': args.hide_promotional_tabs,
             'home_settings_shortcut': args.hide_promotional_tabs,
             'scope': [
@@ -350,6 +359,17 @@ def main():
                 'remain disabled instead of triggering an iOS 27 exception.'
             ),
         }
+        if args.aggressive_remove_ads:
+            domains = load_ad_domains()
+            manifest['ad_removal']['blocked_domains'] = domains
+            manifest['ad_removal']['blocked_domains_sha256'] = digest(
+                AD_DOMAIN_LIST.read_bytes()
+            )
+            manifest['ad_removal']['network_scope'] = (
+                'NSURLProtocol plus NSURLSessionConfiguration injection and '
+                'WKWebView top-level navigation blocking. Taboola suffixes are '
+                'intentionally broad and can disable LINE News recommendations.'
+            )
     if args.entry_only:
         manifest.update({
             'scope': 'Secondary-login entry only; no injected dylib or container/Keychain hooks.',
@@ -377,6 +397,19 @@ def main():
     print(json.dumps(manifest, indent=2))
 
 
+def load_ad_domains(path=AD_DOMAIN_LIST):
+    domains = tuple(
+        line.strip().lower() for line in path.read_text(encoding='utf-8').splitlines()
+        if line.strip() and not line.lstrip().startswith('#')
+    )
+    if not domains or len(domains) != len(set(domains)):
+        raise ValueError('Advertising domain list is empty or contains duplicates.')
+    if any(not scan_ad_domains.normalized_ad_domain(domain) == domain
+           for domain in domains):
+        raise ValueError('Advertising domain list contains an unrecognized domain.')
+    return domains
+
+
 def build_compat_dylib(args, info):
     build = ROOT / 'build'
     build.mkdir(exist_ok=True)
@@ -385,6 +418,8 @@ def build_compat_dylib(args, info):
         build_labels.append('keychain-compat' if args.keychain_compat else 'diagnostics')
     if args.remove_ads:
         build_labels.append('noads')
+    if args.aggressive_remove_ads:
+        build_labels.append('aggressive')
     if args.hide_promotional_tabs:
         build_labels.append('no-promotional-tabs')
     if args.tab_diagnostics:
@@ -395,6 +430,10 @@ def build_compat_dylib(args, info):
         build = build / '-'.join(build_labels)
         build.mkdir(exist_ok=True)
     lib = build / LIB_NAME
+    domain_header = build / 'LINEAdDomains.h'
+    if args.aggressive_remove_ads:
+        domains = load_ad_domains()
+        domain_header.write_text(scan_ad_domains.render_header(domains), encoding='utf-8')
     sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
     subprocess.run(['xcrun', '--sdk', 'iphoneos', 'clang',
                     '-target', 'arm64-apple-ios' + info['MinimumOSVersion'],
@@ -404,6 +443,8 @@ def build_compat_dylib(args, info):
                     *(['-DLINE_MULTI_MESSAGE_DIAGNOSTICS=1'] if args.message_diagnostics else []),
                     *(['-DLINE_MULTI_REMOVE_ADS=1']
                       if args.remove_ads else []),
+                    *(['-DLINE_MULTI_AGGRESSIVE_REMOVE_ADS=1']
+                      if args.aggressive_remove_ads else []),
                     *(['-DLINE_MULTI_HIDE_PROMOTIONAL_TABS=1']
                       if args.hide_promotional_tabs else []),
                     *(['-DLINE_MULTI_TAB_DIAGNOSTICS=1']
@@ -411,6 +452,8 @@ def build_compat_dylib(args, info):
                     '-dynamiclib', '-framework', 'Foundation',
                     *(['-framework', 'UIKit', '-framework', 'CoreGraphics']
                       if args.remove_ads or args.hide_promotional_tabs else []),
+                    *(['-framework', 'WebKit', '-I', str(build)]
+                      if args.aggressive_remove_ads else []),
                     '-Wl,-install_name,' + LOAD_PATH,
                     str(ROOT / 'compat' / 'LINEContainerCompat.m'), '-o', str(lib)], check=True)
     subprocess.run(['codesign', '--force', '--sign', '-', str(lib)], check=True)

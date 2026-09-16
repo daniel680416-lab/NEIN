@@ -55,6 +55,19 @@ static BOOL LMHookClassMethodOnly(Class cls, SEL selector, const char *returnTyp
     return YES;
 }
 
+static BOOL LMHookClassMethod(Class cls, SEL selector, const char *returnType,
+                              unsigned argumentCount, const char *argument2,
+                              const char *argument3, IMP replacement, IMP *original) {
+    Class meta = object_getClass(cls);
+    Method method = meta ? class_getInstanceMethod(meta, selector) : NULL;
+    if (!LMMethodHasType(method, returnType, argumentCount, argument2, argument3)) {
+        return NO;
+    }
+    if (original) *original = method_getImplementation(method);
+    method_setImplementation(method, replacement);
+    return YES;
+}
+
 static void LMNoopObject(id self, SEL selector, id object) {
     (void)self;
     (void)selector;
@@ -71,6 +84,23 @@ static void LMNoopObjectObject(id self, SEL selector, id object, id handler) {
 static void LMNoopNoArg(id self, SEL selector) {
     (void)self;
     (void)selector;
+}
+
+static NSError *LMAdLoadBlockedError(void) {
+    return [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCancelled
+                           userInfo:@{NSLocalizedDescriptionKey: @"Advertising disabled"}];
+}
+
+static void LMFailAdLoad(id self, SEL selector, id unitID, id request, id completion) {
+    (void)self;
+    (void)selector;
+    (void)unitID;
+    (void)request;
+    if (!completion) return;
+    void (^handler)(id, NSError *) = [completion copy];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        handler(nil, LMAdLoadBlockedError());
+    });
 }
 
 static BOOL LMNameContains(NSString *name, NSArray<NSString *> *tokens) {
@@ -258,6 +288,7 @@ static void LMSetVisibleSelectedController(id self, SEL selector, UIViewControll
 }
 
 static void LMInstallAdvertisingLoaderHooks(void) {
+#ifndef LINE_MULTI_AGGRESSIVE_REMOVE_ADS
     Class gadLoader = NSClassFromString(@"GADAdLoader");
     if (gadLoader) {
         LMHook(gadLoader, @selector(loadRequest:), "v", 3, "@", NULL,
@@ -277,28 +308,52 @@ static void LMInstallAdvertisingLoaderHooks(void) {
         LMHook(banner, @selector(loadWithTargeting:), "v", 3, "@", NULL,
                (IMP)LMNoopObject, NULL);
     }
+#endif
 
     Class interstitial = NSClassFromString(@"GADInterstitialAd");
     if (interstitial) {
         LMHook(interstitial, @selector(presentFromRootViewController:), "v", 3, "@", NULL,
                (IMP)LMNoopObject, NULL);
+        LMHookClassMethod(interstitial,
+               @selector(loadWithAdUnitID:request:completionHandler:), "v", 5, "@", "@",
+               (IMP)LMFailAdLoad, NULL);
     }
     Class rewarded = NSClassFromString(@"GADRewardedAd");
     if (rewarded) {
         LMHook(rewarded, @selector(presentFromRootViewController:userDidEarnRewardHandler:),
                "v", 4, "@", "@?", (IMP)LMNoopObjectObject, NULL);
+        LMHookClassMethod(rewarded,
+               @selector(loadWithAdUnitID:request:completionHandler:), "v", 5, "@", "@",
+               (IMP)LMFailAdLoad, NULL);
     }
     Class appOpen = NSClassFromString(@"GADAppOpenAd");
     if (appOpen) {
         LMHook(appOpen, @selector(presentFromRootViewController:), "v", 3, "@", NULL,
                (IMP)LMNoopObject, NULL);
+        LMHookClassMethod(appOpen,
+               @selector(loadWithAdUnitID:request:completionHandler:), "v", 5, "@", "@",
+               (IMP)LMFailAdLoad, NULL);
+    }
+    Class rewardedInterstitial = NSClassFromString(@"GADRewardedInterstitialAd");
+    if (rewardedInterstitial) {
+        LMHookClassMethod(rewardedInterstitial,
+               @selector(loadWithAdUnitID:request:completionHandler:), "v", 5, "@", "@",
+               (IMP)LMFailAdLoad, NULL);
+    }
+    Class gamInterstitial = NSClassFromString(@"GAMInterstitialAd");
+    if (gamInterstitial) {
+        LMHookClassMethod(gamInterstitial,
+               @selector(loadWithAdManagerAdUnitID:request:completionHandler:), "v", 5,
+               "@", "@", (IMP)LMFailAdLoad, NULL);
     }
 
+#ifndef LINE_MULTI_AGGRESSIVE_REMOVE_ADS
     Class imaLoader = NSClassFromString(@"IMAAdsLoader");
     if (imaLoader) {
         LMHook(imaLoader, @selector(requestAdsWithRequest:), "v", 3, "@", NULL,
                (IMP)LMNoopObject, NULL);
     }
+#endif
     Class imaManager = NSClassFromString(@"IMAAdsManager");
     if (imaManager) {
         LMHook(imaManager, @selector(start), "v", 2, NULL, NULL,

@@ -123,6 +123,33 @@ class MainToolTests(unittest.TestCase):
         self.assertTrue(args.remove_ads)
         self.assertTrue(args.hide_promotional_tabs)
 
+    def test_aggressive_ad_removal_enables_standard_removal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = main.parse_args([
+                str(Path(directory) / 'input.ipa'),
+                str(Path(directory) / 'output.ipa'),
+                '--aggressive-remove-ads',
+            ])
+        self.assertTrue(args.aggressive_remove_ads)
+        self.assertTrue(args.remove_ads)
+
+    def test_ad_domain_list_is_unique_and_buildable(self):
+        domains = main.load_ad_domains()
+        self.assertEqual(domains, (
+            'ad.line-scdn.net',
+            'admob-gmats.uc.r.appspot.com',
+            'doubleclick-cn.net',
+            'doubleclick.net',
+            'googleadservices.com',
+            'googlesyndication.com',
+            'imasdk.googleapis.com',
+            'taboola.com',
+            'taboolanews.com',
+        ))
+        header = main.scan_ad_domains.render_header(domains)
+        self.assertIn('LMAdBlockedDomains', header)
+        self.assertIn('@"taboola.com"', header)
+
     def test_primary_login_mode_is_parsed(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'input.ipa'

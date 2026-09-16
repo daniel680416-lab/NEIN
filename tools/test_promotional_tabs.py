@@ -13,6 +13,9 @@ class PromotionalTabsTests(unittest.TestCase):
     def test_native_presentation_lifecycle_with_view_doubles(self):
         self.compile_and_run(Path(__file__).with_name('test_visible_tab_bar.m'))
 
+    def test_ad_domain_boundary_matching(self):
+        self.compile_and_run(Path(__file__).with_name('test_ad_domain_matcher.m'))
+
     def compile_and_run(self, source):
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / 'tab-tests'

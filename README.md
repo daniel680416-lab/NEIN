@@ -24,6 +24,24 @@ python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
   output/NEIN-26.14.0-secondary.ipa
 ```
 
+若要使用激進去廣告模式，加上 `--aggressive-remove-ads`。此模式包含一般的廣告
+loader/UI 移除，並封鎖已核對的 LINE 廣告、Google Ads/IMA 與 Taboola 網域：
+
+```sh
+python3 tools/main.py --keychain-compat --aggressive-remove-ads --hide-promotional-tabs \
+  jp.naver.line_26.14.0_und3fined.ipa \
+  output/NEIN-26.14.0-aggressive-noads.ipa
+```
+
+封鎖清單保存在 [`ad_domains.txt`](ad_domains.txt)，可用以下指令從已核對的 IPA
+重新產生：
+
+```sh
+python3 tools/scan_ad_domains.py jp.naver.line_26.14.0_und3fined.ipa ad_domains.txt
+```
+
+此模式刻意封鎖整個 Taboola 網域後綴，LINE News 與推薦內容可能無法載入。
+
 若要改用 IPA 內其他替代圖示，可以用指定 `--icon` 指令指定圖示。
 
 若要建立保留主手機登入流程的版本，加上 `--primary-login`：
@@ -36,7 +54,8 @@ python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs \
 ```
 
 兩種模式目前都只支援 LINE 26.14.0。
-NEIN 只調整已分析的介面入口與內容區域，不會封鎖網路請求或修改聊天資料。實際結果可能受伺服器設定或地區影響，安裝後請在真機逐項確認。
+一般模式只調整已分析的介面入口與內容區域；激進去廣告模式另會封鎖特定廣告
+網域，但不攔截聊天資料或 LINE RPC。實際結果可能受伺服器設定或地區影響，安裝後請在真機逐項確認。
 
 ## 建議做法 📱
 
@@ -56,6 +75,7 @@ NEIN 只調整已分析的介面入口與內容區域，不會封鎖網路請求
 
 - 不支援推播通知功能
 - 不包含原版的分享、Widget、Siri 與 Apple Watch 擴充功能。
+- `--aggressive-remove-ads` 可能使 LINE News、推薦內容或嵌入式廣告影片無法載入。
 - 只支援已核對的版本和 IPA，其他版本會拒絕處理。
 - 請先備份 LINE 資料，再於測試裝置安裝。
 
