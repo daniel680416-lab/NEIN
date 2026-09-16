@@ -186,10 +186,14 @@ def parse_args(argv=None):
     parser.add_argument('--remove-ads', action='store_true',
                         help='Disable audited ad loaders and remove known ad views (26.14.0 only)')
     parser.add_argument('--hide-promotional-tabs', action='store_true',
-                        help='Remove VOOM, News and Shopping tab controllers (26.14.0 only)')
+                        help='Hide VOOM, News and Shopping tab buttons (26.14.0 only)')
+    parser.add_argument('--tab-diagnostics', action='store_true',
+                        help='Add a tab-only JSON export button; requires --hide-promotional-tabs')
     parser.add_argument('--allow-unverified', action='store_true',
                         help='Allow a different executable hash for a known version/build; still checks the original ARM64 instruction')
     args = parser.parse_args(argv)
+    if args.tab_diagnostics and not args.hide_promotional_tabs:
+        parser.error('--tab-diagnostics requires --hide-promotional-tabs.')
     if args.message_diagnostics:
         args.keychain_compat = True
     if args.keychain_compat:
@@ -294,6 +298,7 @@ def main():
                 'message_diagnostics': args.message_diagnostics,
                 'remove_ads': args.remove_ads,
                 'hide_promotional_tabs': args.hide_promotional_tabs,
+                'tab_diagnostics': args.tab_diagnostics,
                 'source_ipa_sha256': digest(args.input.read_bytes()),
                 'output_ipa_sha256': digest(args.output.read_bytes()),
                 'source_executable_sha256': digest(original), 'patched_executable_sha256': digest(modified),
@@ -325,6 +330,23 @@ def main():
             'verification': (
                 'Static hook ABI checks and archive integrity passed; '
                 'real-device UI and network behavior still require testing.'
+            ),
+            'promotional_tab_safety': (
+                'Preserves the original controller and tab-item arrays. '
+                'Uses a separate native UITabBar with copied non-promotional items '
+                'for UIKit-managed widths, hit regions, selection effects and badges. '
+                'Hides and disables interaction with the original bar, retaining '
+                'its safe-area reservation. Mirrors source bar visibility/geometry '
+                'changes and navigation hide-bottom-bar requests without waiting '
+                'for user interaction. Scoped selection-setter guards skip '
+                'promotional destinations; layout corrects a hidden selection '
+                'that bypassed setters. No private button/lens geometry hooks. '
+                'Native appearance and LINE swipe behavior require device testing.'
+            ),
+            'siri_compat': (
+                'Returns no INVocabulary instance when the re-signed app lacks '
+                'the com.apple.developer.siri entitlement; Siri integrations '
+                'remain disabled instead of triggering an iOS 27 exception.'
             ),
         }
     if args.entry_only:
@@ -364,6 +386,8 @@ def build_compat_dylib(args, info):
         build_labels.append('noads')
     if args.hide_promotional_tabs:
         build_labels.append('no-promotional-tabs')
+    if args.tab_diagnostics:
+        build_labels.append('tab-diagnostics')
     if args.primary_login:
         build_labels.append('primary-login')
     if build_labels:
@@ -381,8 +405,10 @@ def build_compat_dylib(args, info):
                       if args.remove_ads else []),
                     *(['-DLINE_MULTI_HIDE_PROMOTIONAL_TABS=1']
                       if args.hide_promotional_tabs else []),
+                    *(['-DLINE_MULTI_TAB_DIAGNOSTICS=1']
+                      if args.tab_diagnostics else []),
                     '-dynamiclib', '-framework', 'Foundation',
-                    *(['-framework', 'UIKit']
+                    *(['-framework', 'UIKit', '-framework', 'CoreGraphics']
                       if args.remove_ads or args.hide_promotional_tabs else []),
                     '-Wl,-install_name,' + LOAD_PATH,
                     str(ROOT / 'compat' / 'LINEContainerCompat.m'), '-o', str(lib)], check=True)

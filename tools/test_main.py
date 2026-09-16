@@ -132,6 +132,19 @@ class MainToolTests(unittest.TestCase):
             ])
         self.assertTrue(args.primary_login)
 
+    def test_tab_diagnostics_requires_promotional_tabs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = [str(Path(directory) / 'input.ipa'),
+                     str(Path(directory) / 'output.ipa')]
+            self.assertFalse(main.parse_args(paths).tab_diagnostics)
+            with self.assertRaises(SystemExit):
+                main.parse_args(paths + ['--tab-diagnostics'])
+            args = main.parse_args(paths + ['--tab-diagnostics', '--hide-promotional-tabs'])
+            self.assertTrue(args.tab_diagnostics)
+            with self.assertRaises(SystemExit):
+                main.parse_args(paths + ['--tab-diagnostics', '--hide-promotional-tabs',
+                                         '--entry-only'])
+
     def test_entry_only_rejects_primary_login(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'input.ipa'

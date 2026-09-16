@@ -56,6 +56,24 @@ static NSURL *LMContainerURL(id receiver, SEL selector, NSString *identifier) {
     return original ?: fallback;
 }
 
+static id LMUnavailableVocabulary(id self, SEL selector) {
+    (void)self;
+    (void)selector;
+    return nil;
+}
+
+static void LMInstallSiriCompat(void) {
+    Class vocabulary = NSClassFromString(@"INVocabulary");
+    Method method = vocabulary
+        ? class_getClassMethod(vocabulary, @selector(sharedVocabulary))
+        : NULL;
+    if (!method || method_getNumberOfArguments(method) != 2) return;
+    char returnType[16] = {0};
+    method_getReturnType(method, returnType, sizeof(returnType));
+    if (strcmp(returnType, "@") != 0) return;
+    method_setImplementation(method, (IMP)LMUnavailableVocabulary);
+}
+
 static void LMInstallContainerFallback(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -80,6 +98,7 @@ __attribute__((constructor)) static void LMContainerCompatLoad(void) {
         NSString *executable = NSBundle.mainBundle.infoDictionary[@"CFBundleExecutable"];
         if ([executable isEqualToString:@"LINE"]) {
             LMInstallContainerFallback();
+            LMInstallSiriCompat();
 #ifdef LINE_MULTI_DIAGNOSTICS
             LMInstallLoginDiagnostics();
 #endif

@@ -38,6 +38,23 @@ static BOOL LMHook(Class cls, SEL selector, const char *returnType,
     return YES;
 }
 
+static BOOL LMHookClassMethodOnly(Class cls, SEL selector, const char *returnType,
+                                  unsigned argumentCount, const char *argument2,
+                                  const char *argument3, IMP replacement,
+                                  IMP *original) {
+    Method method = class_getInstanceMethod(cls, selector);
+    if (!LMMethodHasType(method, returnType, argumentCount, argument2, argument3)) {
+        return NO;
+    }
+    IMP previous = method_getImplementation(method);
+    if (original) *original = previous;
+    const char *encoding = method_getTypeEncoding(method);
+    if (!class_addMethod(cls, selector, replacement, encoding)) {
+        method_setImplementation(method, replacement);
+    }
+    return YES;
+}
+
 static void LMNoopObject(id self, SEL selector, id object) {
     (void)self;
     (void)selector;
@@ -132,43 +149,97 @@ static void LMViewControllerDidAppear(id self, SEL selector, BOOL animated) {
     if (view) LMHideAdvertisingSubviews(view);
 }
 
-static BOOL LMControllerNameMatches(UIViewController *controller) {
-    if (!controller) return NO;
-    NSArray *tokens = @[
-        @"Voom", @"LineVoom", @"NewsRowTab", @"LineNews",
-        @"NewsPortal", @"CommerceTab", @"ShoppingTab",
-        @"TWCommerce", @"YahooShopping",
-    ];
-    for (UIViewController *current = controller; current;
-         current = current.parentViewController) {
-        if (LMNameContains(NSStringFromClass(current.class), tokens)) return YES;
-    }
-    if ([controller isKindOfClass:UINavigationController.class]) {
-        for (UIViewController *child in ((UINavigationController *)controller).viewControllers) {
-            if (LMControllerNameMatches(child)) return YES;
-        }
-    }
-    NSString *title = controller.tabBarItem.title.uppercaseString;
-    return [@[@"VOOM", @"LINE NEWS", @"NEWS", @"SHOPPING", @"LINE SHOPPING"]
-            containsObject:title];
+#include "LINEVisibleTabBar.h"
+#ifdef LINE_MULTI_TAB_DIAGNOSTICS
+#include "LINETabDiagnostics.h"
+#endif
+
+static LMVoidNoArgIMP LMOriginalTabBarLayout;
+static LMVoidNoArgIMP LMOriginalSourceTabBarLayout;
+static void (*LMOriginalSelectedIndex)(id, SEL, NSUInteger);
+static void (*LMOriginalSelectedController)(id, SEL, UIViewController *);
+static void (*LMOriginalTabHidden)(id, SEL, BOOL);
+static void (*LMOriginalTabAlpha)(id, SEL, CGFloat);
+static void (*LMOriginalTabFrame)(id, SEL, CGRect);
+static void (*LMOriginalTabCenter)(id, SEL, CGPoint);
+static void (*LMOriginalTabBounds)(id, SEL, CGRect);
+static void (*LMOriginalTabTransform)(id, SEL, CGAffineTransform);
+static LMVoidNoArgIMP LMOriginalNavigationWillLayout;
+
+static void LMSourceTabSetHidden(id self, SEL selector, BOOL hidden) {
+    LMOriginalTabHidden(self, selector, hidden);
+    LMSyncSourceTabVisibility(self);
 }
 
-typedef void (*LMVoidArrayBoolIMP)(id, SEL, NSArray *, BOOL);
-static LMVoidArrayBoolIMP LMOriginalSetViewControllers;
+static void LMSourceTabSetAlpha(id self, SEL selector, CGFloat alpha) {
+    LMOriginalTabAlpha(self, selector, LMVisibleSourceAlpha(self, alpha));
+    LMSyncSourceTabVisibility(self);
+}
 
-static void LMSetViewControllers(id self, SEL selector, NSArray *controllers, BOOL animated) {
-    NSMutableArray *filtered = [NSMutableArray arrayWithCapacity:controllers.count];
-    for (UIViewController *controller in controllers) {
-        if (!LMControllerNameMatches(controller)) [filtered addObject:controller];
+static void LMSourceTabSetFrame(id self, SEL selector, CGRect frame) {
+    LMOriginalTabFrame(self, selector, frame);
+    LMSyncSourceTabVisibility(self);
+}
+
+static void LMSourceTabSetCenter(id self, SEL selector, CGPoint center) {
+    LMOriginalTabCenter(self, selector, center);
+    LMSyncSourceTabVisibility(self);
+}
+
+static void LMSourceTabSetBounds(id self, SEL selector, CGRect bounds) {
+    LMOriginalTabBounds(self, selector, bounds);
+    LMSyncSourceTabVisibility(self);
+}
+
+static void LMSourceTabSetTransform(id self, SEL selector, CGAffineTransform transform) {
+    LMOriginalTabTransform(self, selector, transform);
+    LMSyncSourceTabVisibility(self);
+}
+
+static void LMNavigationWillLayout(id self, SEL selector) {
+    if (LMOriginalNavigationWillLayout) LMOriginalNavigationWillLayout(self, selector);
+    UITabBarController *controller = [(UINavigationController *)self tabBarController];
+    LMVisibleTabBar *presentation = objc_getAssociatedObject(controller, &LMVisibleTabBarKey);
+    [presentation syncVisibility];
+}
+
+static void LMTabBarControllerDidLayoutSubviews(id self, SEL selector) {
+    if (LMOriginalTabBarLayout) LMOriginalTabBarLayout(self, selector);
+    if (![self isKindOfClass:UITabBarController.class]) return;
+    LMUpdateVisibleTabBar(self);
+#ifdef LINE_MULTI_TAB_DIAGNOSTICS
+    LMInstallTabDiagnosticButton(self);
+#endif
+}
+
+static void LMSourceTabBarLayout(id self, SEL selector) {
+    if (LMOriginalSourceTabBarLayout) LMOriginalSourceTabBarLayout(self, selector);
+    for (UIResponder *responder = [(UITabBar *)self nextResponder]; responder;
+         responder = responder.nextResponder) {
+        if ([responder isKindOfClass:UITabBarController.class] &&
+            ((UITabBarController *)responder).tabBar == self) {
+            LMUpdateVisibleTabBar((UITabBarController *)responder);
+            return;
+        }
     }
-    // Never hand UIKit an empty tab list. A server/configuration variation
-    // must not turn this compatibility hook into a startup crash.
-    if (controllers.count && !filtered.count) {
-        filtered = [controllers mutableCopy];
+}
+
+static void LMSetVisibleSelectedIndex(id self, SEL selector, NSUInteger requested) {
+    NSUInteger destination = LMGuardVisibleTabSelection(self, requested);
+    if (destination == NSNotFound && requested != NSNotFound) return;
+    LMOriginalSelectedIndex(self, selector, destination);
+}
+
+static void LMSetVisibleSelectedController(id self, SEL selector, UIViewController *requested) {
+    UITabBarController *controller = self;
+    NSArray<UIViewController *> *controllers = controller.viewControllers;
+    NSUInteger index = requested ? [controllers indexOfObjectIdenticalTo:requested] : NSNotFound;
+    if (index != NSNotFound) {
+        NSUInteger destination = LMGuardVisibleTabSelection(controller, index);
+        if (destination == NSNotFound) return;
+        if (destination < controllers.count) requested = controllers[destination];
     }
-    if (LMOriginalSetViewControllers) {
-        LMOriginalSetViewControllers(self, selector, filtered, animated);
-    }
+    LMOriginalSelectedController(self, selector, requested);
 }
 
 static void LMInstallAdvertisingLoaderHooks(void) {
@@ -231,9 +302,34 @@ static void LMInstallAdvertisingCleanupHook(void) {
 }
 
 static void LMInstallPromotionalTabHooks(void) {
+    LMHookClassMethodOnly(UITabBar.class, @selector(setAlpha:), "v", 3, @encode(CGFloat), NULL,
+                          (IMP)LMSourceTabSetAlpha, (IMP *)&LMOriginalTabAlpha);
+    LMHookClassMethodOnly(UITabBar.class, @selector(setHidden:), "v", 3, @encode(BOOL), NULL,
+                          (IMP)LMSourceTabSetHidden, (IMP *)&LMOriginalTabHidden);
+    LMHookClassMethodOnly(UITabBar.class, @selector(setFrame:), "v", 3, @encode(CGRect), NULL,
+                          (IMP)LMSourceTabSetFrame, (IMP *)&LMOriginalTabFrame);
+    LMHookClassMethodOnly(UITabBar.class, @selector(setCenter:), "v", 3, @encode(CGPoint), NULL,
+                          (IMP)LMSourceTabSetCenter, (IMP *)&LMOriginalTabCenter);
+    LMHookClassMethodOnly(UITabBar.class, @selector(setBounds:), "v", 3, @encode(CGRect), NULL,
+                          (IMP)LMSourceTabSetBounds, (IMP *)&LMOriginalTabBounds);
+    LMHookClassMethodOnly(UITabBar.class, @selector(setTransform:), "v", 3, @encode(CGAffineTransform), NULL,
+                          (IMP)LMSourceTabSetTransform, (IMP *)&LMOriginalTabTransform);
+    LMHookClassMethodOnly(UINavigationController.class, @selector(viewWillLayoutSubviews),
+                          "v", 2, NULL, NULL, (IMP)LMNavigationWillLayout,
+                          (IMP *)&LMOriginalNavigationWillLayout);
     Class controller = UITabBarController.class;
-    LMHook(controller, @selector(setViewControllers:animated:), "v", 4, "@", "B",
-           (IMP)LMSetViewControllers, (IMP *)&LMOriginalSetViewControllers);
+    LMHookClassMethodOnly(controller, @selector(setSelectedIndex:),
+                          "v", 3, @encode(NSUInteger), NULL,
+                          (IMP)LMSetVisibleSelectedIndex, (IMP *)&LMOriginalSelectedIndex);
+    LMHookClassMethodOnly(controller, @selector(setSelectedViewController:),
+                          "v", 3, "@", NULL,
+                          (IMP)LMSetVisibleSelectedController, (IMP *)&LMOriginalSelectedController);
+    LMHookClassMethodOnly(controller, @selector(viewDidLayoutSubviews),
+                          "v", 2, NULL, NULL, (IMP)LMTabBarControllerDidLayoutSubviews,
+                          (IMP *)&LMOriginalTabBarLayout);
+    LMHookClassMethodOnly(UITabBar.class, @selector(layoutSubviews),
+                          "v", 2, NULL, NULL, (IMP)LMSourceTabBarLayout,
+                          (IMP *)&LMOriginalSourceTabBarLayout);
 }
 
 void LMInstallAdRemovalCompat(BOOL removeAds, BOOL hidePromotionalTabs) {
