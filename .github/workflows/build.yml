@@ -22,12 +22,11 @@ jobs:
           # 如果 NEIN 未來有 requirements.txt 可以取消下方註解
           # pip install -r requirements.txt
 
-      - name: Download Decrypted LINE IPA
-        run: |https://u.pcloud.link/publink/show?code=XZI5JLJZhMLfsIXtDepjeeEoICHtF74rD1ty
-          # 這裡需要替換成你事先上傳或取得的「已解密原版 LINE IPA」下載連結
-          # 例如：curl -L -o line_original.ipa "https://你的下載連結/line.ipa"
-          # 如果你直接把原版 ipa 放進專案根目錄，命名為 line_original.ipa，此步驟可刪除
-          echo "請確保 line_original.ipa 已準備就緒"
+            - name: Download Decrypted LINE IPA
+        run: |
+          # 使用 curl 下載你的 pCloud 解密版 LINE IPA，並重新命名為 line_original.ipa
+          curl -L -o line_original.ipa "https://pcloud.com"
+
 
       - name: Run NEIN Script
         run: |
