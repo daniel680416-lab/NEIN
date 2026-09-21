@@ -17,25 +17,16 @@ jobs:
           python-version: '3.11'
 
       - name: Install System Dependencies
-        run: |
-          # 解決 FileNotFoundError：補齊 macOS 缺少的 Linux 打包工具
-          brew install wget dpkg
-
-      - name: Install Python Dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          # 確保安裝 NEIN 腳本執行所需的 Python 模組
-          if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
+        run: brew install wget dpkg
 
       - name: Download Decrypted LINE IPA
         run: |
-          # 下載你的 pCloud 解密版原版 LINE IPA
-          curl -L -o line_original.ipa "https://pcloud.com"
+          # 使用你提供的 AList 直連網址下載原版 LINE IPA
+          curl -L -o line_original.ipa "http://mamayoga.ddns.net:8080/d/root/line_original.ipa?sign=OwC36S4YB-CHomKw4e51bpenZjlVXO4euj1hYZmsQI4=:0"
 
       - name: Run NEIN Script
         run: |
           mkdir -p output
-          # 執行 NEIN 注入（使用正統 macOS 的 python3 指令）
           python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs line_original.ipa output/NEIN-LINE-secondary.ipa
 
       - name: Upload IPA Artifact
