@@ -19,20 +19,17 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # 如果 NEIN 未來有 requirements.txt 可以取消下方註解
-          # pip install -r requirements.txt
 
-            - name: Download Decrypted LINE IPA
+      - name: Download Decrypted LINE IPA
         run: |
-          # 使用 curl 下載你的 pCloud 解密版 LINE IPA，並重新命名為 line_original.ipa
+          # 下載 pCloud 解密版 LINE IPA，並重新命名為 line_original.ipa
           curl -L -o line_original.ipa "https://pcloud.com"
-
 
       - name: Run NEIN Script
         run: |
           # 建立輸出資料夾
           mkdir -p output
-          # 執行 NEIN 官方注入指令 (以副裝置 iPad 模式為例)
+          # 執行 NEIN 官方注入指令 (此處以副裝置 iPad 模式、移除去廣告、隱藏推廣標籤為例)
           python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs line_original.ipa output/NEIN-LINE-secondary.ipa
 
       - name: Upload IPA Artifact
