@@ -1,11 +1,11 @@
 name: Build NEIN LINE IPA
 
 on:
-  workflow_dispatch: # 允許手動點擊按鈕觸發執行
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-latest # 使用 GitHub 免費的 macOS 雲端環境
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Code
@@ -17,19 +17,14 @@ jobs:
           python-version: '3.x'
 
       - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
+        run: python -m pip install --upgrade pip
 
       - name: Download Decrypted LINE IPA
-        run: |
-          # 下載 pCloud 解密版 LINE IPA，並重新命名為 line_original.ipa
-          curl -L -o line_original.ipa "https://pcloud.com"
+        run: curl -L -o line_original.ipa "https://pcloud.com"
 
       - name: Run NEIN Script
         run: |
-          # 建立輸出資料夾
           mkdir -p output
-          # 執行 NEIN 官方注入指令 (此處以副裝置 iPad 模式、移除去廣告、隱藏推廣標籤為例)
           python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs line_original.ipa output/NEIN-LINE-secondary.ipa
 
       - name: Upload IPA Artifact
