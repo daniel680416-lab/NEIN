@@ -1,0 +1,43 @@
+name: Build NEIN LINE IPA
+
+on:
+  workflow_dispatch: # 允許手動點擊按鈕觸發執行
+
+jobs:
+  build:
+    runs-on: macos-latest # 使用 GitHub 免費的 macOS 雲端環境
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 如果 NEIN 未來有 requirements.txt 可以取消下方註解
+          # pip install -r requirements.txt
+
+      - name: Download Decrypted LINE IPA
+        run: |https://u.pcloud.link/publink/show?code=XZI5JLJZhMLfsIXtDepjeeEoICHtF74rD1ty
+          # 這裡需要替換成你事先上傳或取得的「已解密原版 LINE IPA」下載連結
+          # 例如：curl -L -o line_original.ipa "https://你的下載連結/line.ipa"
+          # 如果你直接把原版 ipa 放進專案根目錄，命名為 line_original.ipa，此步驟可刪除
+          echo "請確保 line_original.ipa 已準備就緒"
+
+      - name: Run NEIN Script
+        run: |
+          # 建立輸出資料夾
+          mkdir -p output
+          # 執行 NEIN 官方注入指令 (以副裝置 iPad 模式為例)
+          python3 tools/main.py --keychain-compat --remove-ads --hide-promotional-tabs line_original.ipa output/NEIN-LINE-secondary.ipa
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NEIN-LINE-IPA
+          path: output/NEIN-LINE-secondary.ipa
